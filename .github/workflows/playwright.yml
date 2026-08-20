@@ -10,9 +10,11 @@ on:
         description: 'Jalankan juga spec yang digerbangi reCAPTCHA (headed via xvfb)'
         type: boolean
         default: false
-  schedule:
-    # 01:00 UTC = 08:00 WIB, tiap hari
-    - cron: '0 1 * * *'
+  # CATATAN: TANPA jadwal cron — sengaja.
+  # Suite ini mengirim payload SQL injection/XSS dan login-gagal beruntun. Kalau
+  # TEST_BASE_URL menunjuk lingkungan nyata, menjalankannya otomatis tiap hari tanpa
+  # pengawasan sama saja menembaki lingkungan itu terus-menerus. Jadi hanya jalan
+  # saat push ke master, pull request, atau dispatch manual.
 
 permissions:
   contents: read
@@ -33,6 +35,11 @@ jobs:
       TEST_REGISTRATION_URL: ${{ secrets.TEST_REGISTRATION_URL }}
       TEST_AGENT_USERNAME: ${{ secrets.TEST_AGENT_USERNAME }}
       TEST_AGENT_PASSWORD: ${{ secrets.TEST_AGENT_PASSWORD }}
+      # Label UI ber-merek (mis. teks tab agen / opsi dropdown) datang dari secret,
+      # bukan dari kode — supaya repo tetap netral tapi selector cocok situs asli.
+      TEST_LABEL_TAB_AGEN: ${{ secrets.TEST_LABEL_TAB_AGEN }}
+      TEST_LABEL_MENU_PROFIL: ${{ secrets.TEST_LABEL_MENU_PROFIL }}
+      TEST_LABEL_SUMBER_INFORMASI: ${{ secrets.TEST_LABEL_SUMBER_INFORMASI }}
       # FORCE_RUN_RECAPTCHA sengaja TIDAK diset di sini: job ini headless, dan
       # reCAPTCHA invisible menolak Chromium headless. Spec ber-reCAPTCHA
       # (registrasi & buat listing) ditangani job `gated` di bawah, yang headed.
@@ -107,6 +114,9 @@ jobs:
       TEST_REGISTRATION_URL: ${{ secrets.TEST_REGISTRATION_URL }}
       TEST_AGENT_USERNAME: ${{ secrets.TEST_AGENT_USERNAME }}
       TEST_AGENT_PASSWORD: ${{ secrets.TEST_AGENT_PASSWORD }}
+      TEST_LABEL_TAB_AGEN: ${{ secrets.TEST_LABEL_TAB_AGEN }}
+      TEST_LABEL_MENU_PROFIL: ${{ secrets.TEST_LABEL_MENU_PROFIL }}
+      TEST_LABEL_SUMBER_INFORMASI: ${{ secrets.TEST_LABEL_SUMBER_INFORMASI }}
       FORCE_RUN_RECAPTCHA: 'true'
       USE_CHROME_CHANNEL: 'true'
     steps:
