@@ -140,6 +140,23 @@ npm run report:open
 Di CI, report tiap run diunggah sebagai artifact dan versi `master` dipublikasikan ke
 GitHub Pages.
 
+### Suite ber-reCAPTCHA di CI
+
+Registrasi dan buat listing digerbangi reCAPTCHA invisible, jadi keduanya **tidak** ikut
+run harian. Ada job `gated` terpisah yang hanya jalan lewat **Run workflow** manual
+dengan input `force_run_recaptcha = true`: memakai Chrome asli (bukan Chromium bundled),
+mode headed lewat `xvfb-run`, `--workers=1`, dan report-nya jadi artifact tersendiri
+(tidak diterbitkan ke Pages).
+
+Yang perlu disadari sebelum mengandalkan job itu:
+
+- Skor reCAPTCHA v3 tetap jatuh dari IP datacenter runner GitHub. Supaya benar-benar
+  hijau, lingkungan uji harus memakai **test key reCAPTCHA** atau meng-allowlist CI —
+  itu pekerjaan sisi aplikasi, bukan sisi test. Karena itu job-nya `continue-on-error`.
+- Kedua spec **menulis data nyata** (pengajuan agen & listing baru). Arahkan ke
+  lingkungan yang datanya boleh kotor, jangan ke produksi.
+- Tanpa secrets, keduanya tetap skip dengan alasan tertulis.
+
 ---
 
 ## Catatan lapangan yang membentuk kode ini

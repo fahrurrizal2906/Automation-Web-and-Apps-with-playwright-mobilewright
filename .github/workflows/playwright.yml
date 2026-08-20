@@ -33,7 +33,9 @@ jobs:
       TEST_REGISTRATION_URL: ${{ secrets.TEST_REGISTRATION_URL }}
       TEST_AGENT_USERNAME: ${{ secrets.TEST_AGENT_USERNAME }}
       TEST_AGENT_PASSWORD: ${{ secrets.TEST_AGENT_PASSWORD }}
-      FORCE_RUN_RECAPTCHA: ${{ inputs.force_run_recaptcha && 'true' || '' }}
+      # FORCE_RUN_RECAPTCHA sengaja TIDAK diset di sini: job ini headless, dan
+      # reCAPTCHA invisible menolak Chromium headless. Spec ber-reCAPTCHA
+      # (registrasi & buat listing) ditangani job `gated` di bawah, yang headed.
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +76,72 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: allure-report
+
+  # Suite ber-reCAPTCHA: registrasi agen & buat listing.
+  #
+  # Kenapa jobnya terpisah dan HANYA manual:
+  #   1. reCAPTCHA invisible menolak Chromium headless → harus headed (xvfb-run)
+  #      dan memakai Chrome asli, bukan Chromium bundled (skornya berbeda).
+  #   2. Skor reCAPTCHA v3 tetap jatuh dari IP datacenter runner GitHub. Selama
+  #      lingkungan uji belum memakai test key reCAPTCHA atau allowlist CI, job ini
+  #      WAJAR gagal — karena itu `continue-on-error` dan tidak diikutkan cron/push.
+  #   3. Kedua spec MENULIS DATA NYATA (pengajuan agen & listing baru). Jangan
+  #      arahkan ke produksi; pakai lingkungan yang datanya boleh kotor.
+  #
+  # Tanpa secrets, kedua spec tetap SKIP dengan alasan tertulis (bukan gagal).
+  gated:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.force_run_recaptcha == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
+      TEST_AGENT_DASHBOARD_URL: ${{ secrets.TEST_AGENT_DASHBOARD_URL }}
+      TEST_REGISTRATION_URL: ${{ secrets.TEST_REGISTRATION_URL }}
+      TEST_AGENT_USERNAME: ${{ secrets.TEST_AGENT_USERNAME }}
+      TEST_AGENT_PASSWORD: ${{ secrets.TEST_AGENT_PASSWORD }}
+      FORCE_RUN_RECAPTCHA: 'true'
+      USE_CHROME_CHANNEL: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Chrome asli + dependensi
+        run: npx playwright install --with-deps chrome
+
+      - name: Pasang xvfb (untuk mode headed di runner tanpa display)
+        run: sudo apt-get install -y xvfb
+
+      - name: Buat fixture sintetis
+        run: npm run fixtures
+
+      - name: Jalankan suite ber-reCAPTCHA (headed via xvfb)
+        # workers=1: keduanya login sebagai akun yang sama & menulis data.
+        run: |
+          xvfb-run -a npx playwright test \
+            test/web/registrasi.spec.ts test/web/buat-listing.spec.ts \
+            --project=chromium --headed --workers=1 \
+            --reporter=line,allure-playwright
+        continue-on-error: true
+
+      - name: Generate Allure report
+        if: always()
+        run: npm run report:generate
+
+      # Artifact terpisah — TIDAK diterbitkan ke Pages agar tidak menimpa report
+      # suite utama, dan agar screenshot/trace lingkungan uji tidak tayang publik.
+      - name: Unggah Allure report (gated)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-gated
+          path: allure-report
+          retention-days: 14
 
   # Report dipublikasikan lewat artifact Pages (bukan folder docs/ yang di-commit),
   # supaya riwayat repo tidak membengkak oleh ribuan berkas report per run.
