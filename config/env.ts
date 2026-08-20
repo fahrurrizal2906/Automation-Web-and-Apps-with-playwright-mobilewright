@@ -9,6 +9,9 @@
  * GAGAL CEPAT dengan pesan jelas, bukan diam-diam menghantam host acak.
  */
 
+import fs from 'fs';
+import path from 'path';
+
 // Muat `.env` bila ada. Dibungkus try/catch supaya repo tetap jalan tanpa dotenv
 // (mis. di CI yang menyuntik env lewat secrets, bukan lewat file).
 try {
@@ -69,6 +72,42 @@ export const AGENT = {
 };
 
 export const punyaKredensialAgen = AGENT.username !== '' && AGENT.password !== '';
+
+/**
+ * Berkas `storageState` sesi agen.
+ *
+ * Alasan keberadaannya: reCAPTCHA invisible menolak sesi otomatis di **langkah
+ * login**, sedangkan form-form setelah login tidak dilindungi captcha. Dengan
+ * login sekali secara headed (`npm run auth:agen`) lalu memakai sesinya, spec
+ * pasca-login bisa jalan headless — termasuk di CI, di mana sesinya dipulihkan
+ * dari secret (lihat `scripts/sesi-agen.mjs`).
+ *
+ * Berkasnya berisi token sesi nyata → ada di .gitignore, JANGAN pernah di-commit.
+ */
+export const SESI_AGEN_FILE =
+  env('TEST_AGENT_STORAGE_STATE') ?? path.join(process.cwd(), 'playwright', '.auth', 'agen.json');
+
+/**
+ * Apakah sesi agen tersimpan tersedia DAN berisi sesuatu?
+ *
+ * Bukan sekadar cek keberadaan berkas: `storageState` yang tersimpan dari sesi
+ * gagal login berbentuk `{"cookies":[],"origins":[]}` — berkas ada, isinya kosong.
+ * Kalau itu dianggap "ada sesi", spec pasca-login akan menempuh jalur tanpa login
+ * lalu gagal di dashboard dengan pesan yang menyesatkan. Lebih baik dianggap tidak
+ * ada sesi, sehingga spec-nya skip dengan alasan yang benar.
+ */
+export function adaSesiAgen(): boolean {
+  try {
+    if (!fs.existsSync(SESI_AGEN_FILE)) return false;
+    const isi = JSON.parse(fs.readFileSync(SESI_AGEN_FILE, 'utf8')) as {
+      cookies?: unknown[];
+      origins?: unknown[];
+    };
+    return (isi.cookies?.length ?? 0) + (isi.origins?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Pola ID listing yang dipakai platform (mis. `131226-ABC00007`). Dipakai untuk

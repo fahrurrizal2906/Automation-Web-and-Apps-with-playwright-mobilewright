@@ -87,4 +87,13 @@ tulisPng(resolve('fixtures/sample-id-card.png'), 800, 500, (x, y) => {
   return [238, 240, 244];
 });
 
+// Berkas non-gambar: untuk membuktikan validasi tipe berkas pada input unggah
+// benar-benar MENOLAK, bukan sekadar "tidak terjadi apa-apa".
+writeFileSync(
+  resolve('fixtures/bukan-gambar.txt'),
+  'Berkas ini SENGAJA bukan gambar. Dipakai untuk menguji penolakan tipe berkas\n' +
+    'pada input unggah foto (hanya JPEG/JPG/PNG yang seharusnya diterima).\n',
+);
+console.log('✔ fixtures/bukan-gambar.txt');
+
 console.log('\nFixture sintetis siap. Tidak ada data pribadi di dalamnya.');

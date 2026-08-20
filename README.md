@@ -64,12 +64,28 @@ scripts/
 | TC-09 | 3× gagal berturut-turut | tetap di konteks login setiap kali |
 | TC-10 | Tipe field password | `type="password"` |
 
-### Web — Registrasi agen (`test/web/registrasi.spec.ts`)
+### Web — Registrasi agen (2 spec: form vs submit)
 
-Happy path 2 langkah dengan data dinamis (email/WA unik per run), upload foto,
-dropdown berantai (opsi tertentu memunculkan field wajib baru), **tanda tangan
-canvas** yang digambar lewat `mouse.move/down/up`, dialog konfirmasi, sampai
-halaman sukses.
+reCAPTCHA invisible hanya menghalangi **langkah terakhir** (kirim data). Menaruh
+seluruh alur dalam satu test membuat semua yang sebenarnya bisa diverifikasi ikut
+tergerbangi captcha — jadi spec-nya dipecah:
+
+`test/web/registrasi-form.spec.ts` — perilaku form, **tanpa submit**, jalan headless
+di CI dan tidak pernah membuat pengajuan nyata:
+
+| TC | Skenario | Asersi inti |
+| --- | --- | --- |
+| TC-01 | Lanjutkan dengan form kosong | tetap di Step 1 (validasi field wajib jalan) |
+| TC-02 | Data pribadi + Keterangan opsional | nilai tidak hilang saat form re-render |
+| TC-03 | Unggah berkas `.txt` | ditolak dengan pesan tipe file tidak valid |
+| TC-04 | Unggah PNG | tidak ditolak sebagai tipe salah + ada umpan balik upload |
+| TC-05 | Dropdown sumber informasi | daftar opsi terbaca & tanpa duplikat |
+| TC-06 | Step 1 lengkap → Lanjutkan | sampai di Step 2 |
+| TC-07 | Tanda tangan → Submit Data | dialog konfirmasi muncul, lalu **dibatalkan** |
+
+`test/web/registrasi.spec.ts` — happy path penuh sampai halaman sukses (data dinamis
+email/WA unik per run, **tanda tangan canvas** via `mouse.move/down/up`, dialog
+konfirmasi). Ini yang benar-benar mengirim data, jadi tetap digerbangi & headed.
 
 ### Web — Buat listing (`test/web/buat-listing.spec.ts`)
 
@@ -77,6 +93,11 @@ Login → dashboard agen (SPA) → upload foto (crop & upload) → 4 kelompok fi
 (info dasar, lokasi berantai, spesifikasi, vendor) → submit → verifikasi listing
 muncul di daftar. Page object-nya **adaptif**: field yang tidak muncul untuk tipe
 properti tertentu (mis. kamar tidur pada "Tanah") dilewati, bukan bikin gagal.
+
+Captcha di alur ini ada di **langkah login**, bukan di form listing-nya. Karena itu
+spec ini punya dua jalur masuk: memakai **sesi tersimpan** (`npm run auth:agen`) yang
+melewati login sehingga bisa jalan headless di CI, atau login biasa dengan kredensial
+yang menuntut mode headed.
 
 ### Android native — Login agen, negatif & keamanan (`test-mobile-native/login-agen-negatif.test.ts`)
 
@@ -110,9 +131,22 @@ npm run fixtures                       # buat fixture gambar sintetis
 ```bash
 npm test                               # semua spec web (project chromium)
 npm run test:login-negatif             # suite negatif login
-npm run test:registrasi                # headed — alur ber-reCAPTCHA
-npm run test:buat-listing              # headed — butuh kredensial agen
+npm run test:registrasi-form           # perilaku form registrasi (headless, tanpa submit)
+npm run test:registrasi                # headed — submit sebenarnya, ber-reCAPTCHA
+npm run test:buat-listing              # butuh sesi tersimpan atau kredensial agen
 ```
+
+Sesi agen — dipakai agar spec pasca-login bisa jalan headless:
+
+```bash
+npm run auth:agen                      # login sekali HEADED (Chrome asli), simpan sesi
+npm run sesi:base64                    # cetak base64-nya untuk secret CI
+```
+
+`npm run auth:agen` memakai Chrome asli karena reCAPTCHA v3 memberi skor lebih rendah
+pada Chromium bundled sampai login ditolak diam-diam (`npx playwright install chrome`
+bila belum ada). Hasilnya `playwright/.auth/agen.json` — berisi token sesi nyata,
+ada di `.gitignore`, dan punya masa kedaluwarsa sehingga perlu dibuat ulang berkala.
 
 Semua script di atas melalui [`scripts/jalankan.mjs`](scripts/jalankan.mjs) yang
 **selalu** men-generate Allure report, termasuk saat test gagal — justru saat gagal
@@ -142,20 +176,28 @@ GitHub Pages.
 
 ### Suite ber-reCAPTCHA di CI
 
-Registrasi dan buat listing digerbangi reCAPTCHA invisible, jadi keduanya **tidak** ikut
-run harian. Ada job `gated` terpisah yang hanya jalan lewat **Run workflow** manual
-dengan input `force_run_recaptcha = true`: memakai Chrome asli (bukan Chromium bundled),
-mode headed lewat `xvfb-run`, `--workers=1`, dan report-nya jadi artifact tersendiri
+Strateginya bukan "melawan captcha", tapi memisahkan apa yang benar-benar terhalang
+captcha dari apa yang tidak:
+
+| Yang diuji | Di CI? | Caranya |
+| --- | --- | --- |
+| Perilaku form registrasi (7 TC) | ✅ headless | spec terpisah, berhenti sebelum submit |
+| Buat listing end-to-end | ✅ headless | sesi tersimpan dari secret `AGENT_STORAGE_STATE_B64` |
+| Submit registrasi + halaman sukses | ⚠️ manual | job `gated`: headed via `xvfb-run` + Chrome asli |
+
+Job `gated` hanya jalan lewat **Run workflow** manual dengan input
+`force_run_recaptcha = true`, `--workers=1`, dan report-nya jadi artifact tersendiri
 (tidak diterbitkan ke Pages).
 
-Yang perlu disadari sebelum mengandalkan job itu:
+Yang perlu disadari:
 
-- Skor reCAPTCHA v3 tetap jatuh dari IP datacenter runner GitHub. Supaya benar-benar
-  hijau, lingkungan uji harus memakai **test key reCAPTCHA** atau meng-allowlist CI —
-  itu pekerjaan sisi aplikasi, bukan sisi test. Karena itu job-nya `continue-on-error`.
-- Kedua spec **menulis data nyata** (pengajuan agen & listing baru). Arahkan ke
-  lingkungan yang datanya boleh kotor, jangan ke produksi.
-- Tanpa secrets, keduanya tetap skip dengan alasan tertulis.
+- Untuk submit registrasi, skor reCAPTCHA v3 tetap jatuh dari IP datacenter runner
+  GitHub. Supaya benar-benar hijau, lingkungan uji harus memakai **test key
+  reCAPTCHA** atau meng-allowlist CI — itu pekerjaan sisi aplikasi, bukan sisi test.
+  Karena itu job-nya `continue-on-error`.
+- Spec yang **menulis data nyata** (submit registrasi & buat listing) harus diarahkan
+  ke lingkungan yang datanya boleh kotor, jangan ke produksi.
+- Tanpa secrets, semuanya skip dengan alasan tertulis — bukan gagal.
 
 ---
 
@@ -177,6 +219,14 @@ Bagian ini yang paling banyak menghemat waktu saat suite dipakai berulang:
   auto-scroll membuat dump uiautomator kadang kembali kosong (`no XML content`).
   Itu batasan alat, ditangani wrapper retry `tahanFlakyDump()` — bukan alasan untuk
   melunakkan asersi fungsional.
+- **Pisahkan yang terhalang captcha dari yang tidak.** reCAPTCHA hanya menjaga satu
+  langkah (login, atau submit akhir). Menggerbangi seluruh spec karena satu langkah
+  itu berarti membuang cakupan yang sebenarnya bisa diverifikasi setiap hari.
+- **Sesi tersimpan yang kosong lebih berbahaya daripada tidak ada sesi.**
+  `storageState` dari login yang gagal tetap berbentuk JSON valid
+  (`{"cookies":[],"origins":[]}`). Kalau itu dianggap "ada sesi", spec menempuh jalur
+  tanpa login lalu gagal di dashboard dengan alasan yang menyesatkan — jadi
+  `adaSesiAgen()` memeriksa isinya, bukan cuma keberadaan berkasnya.
 - **Uji yang membuat data nyata harus digerbangi.** TC submit di suite mobile hanya
   jalan bila `RUN_BUAT_LISTING_SUBMIT=1`.
 - **Fixture upload tidak di-commit.** Foto properti dan foto dokumen identitas tidak

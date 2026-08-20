@@ -24,6 +24,7 @@ playwright/.auth/
 fixtures/*.png
 fixtures/*.jpg
 fixtures/*.jpeg
+fixtures/*.txt
 !fixtures/.gitkeep
 
 # OS / editor

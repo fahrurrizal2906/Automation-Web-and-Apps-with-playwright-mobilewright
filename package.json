@@ -8,6 +8,7 @@
     "test": "node scripts/jalankan.mjs --project=chromium",
     "test:login-negatif": "node scripts/jalankan.mjs test/web/agent-login-negative.spec.ts --project=chromium",
     "test:registrasi": "node scripts/jalankan.mjs test/web/registrasi.spec.ts --project=chromium --headed",
+    "test:registrasi-form": "node scripts/jalankan.mjs test/web/registrasi-form.spec.ts --project=chromium",
     "test:buat-listing": "node scripts/jalankan.mjs test/web/buat-listing.spec.ts --project=chromium --headed",
     "test:ci": "playwright test --project=chromium --reporter=line,allure-playwright",
     "mobile:test": "node scripts/jalankan.mjs --mobile",
@@ -18,7 +19,10 @@
     "fixtures": "node scripts/buat-fixture.mjs",
     "report:generate": "allure generate allure-results --clean -o allure-report",
     "report:open": "allure open allure-report",
-    "audit:sanitasi": "node scripts/audit-sanitasi.mjs"
+    "audit:sanitasi": "node scripts/audit-sanitasi.mjs",
+    "auth:agen": "playwright test --project=setup",
+    "sesi:base64": "node scripts/sesi-agen.mjs ke-base64",
+    "sesi:pulihkan": "node scripts/sesi-agen.mjs dari-base64"
   },
   "keywords": [
     "playwright",

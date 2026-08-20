@@ -56,6 +56,13 @@ dipetakan ke folder lewat `testDir` per project:
 
 Menambah spec = taruh di folder yang benar; tidak ada daftar yang perlu disunting.
 
+**Sesi agen (`storageState`).** reCAPTCHA menjaga langkah **login**, bukan form
+setelahnya. `npm run auth:agen` (project `setup`, headed, Chrome asli) menyimpan sesi
+ke `playwright/.auth/agen.json`; spec pasca-login memakainya lewat
+`test.use({ storageState: adaSesiAgen() ? SESI_AGEN_FILE : undefined })` sehingga bisa
+jalan headless di CI. Di CI, berkasnya dipulihkan dari secret `AGENT_STORAGE_STATE_B64`
+(`scripts/sesi-agen.mjs`). Berkas sesi berisi token nyata — jangan pernah di-commit.
+
 **Dua bentuk login.** `LOGIN_MODE` (`config/env.ts`) menentukan apakah form login
 ada di modal (`'modal'`, pola produksi) atau berdiri sendiri di `/agent/login`
 (`'page'`, pola dev/staging). `AgentLoginPage` bercabang pada nilai itu.
@@ -86,5 +93,11 @@ ada di modal (`'modal'`, pola produksi) atau berdiri sendiri di `/agent/login`
 - **reCAPTCHA invisible menolak Chromium bundled headless.** Spec terkait skip di CI
   kecuali `FORCE_RUN_RECAPTCHA=true`; lokal jalankan headed (`USE_CHROME_CHANNEL=true`
   memakai Chrome asli).
+- **Berkas `*.setup.ts` tidak cocok `testMatch` default Playwright**
+  (`**/*.@(spec|test).ts`). Tanpa `testMatch: '**/*.setup.ts'` di project `setup`,
+  hasilnya "No tests found" — bukan error yang menunjuk sebabnya.
+- **`storageState` dari login gagal tetap JSON valid tapi kosong.** Periksa isinya
+  (`adaSesiAgen()`), jangan cuma `fs.existsSync` — kalau tidak, spec menempuh jalur
+  "sudah login" lalu gagal di tempat yang jauh dari akar masalahnya.
 - **`npm run x ; npm run y` tidak jalan di Windows** (npm memakai cmd.exe, `;` bukan
   operator chain). Itu sebabnya ada `scripts/jalankan.mjs`.

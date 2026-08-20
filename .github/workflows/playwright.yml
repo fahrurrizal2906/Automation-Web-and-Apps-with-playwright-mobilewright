@@ -55,6 +55,14 @@ jobs:
       - name: Audit sanitasi (repo publik)
         run: npm run audit:sanitasi
 
+      # Sesi agen dari secret (opsional). Dengan sesi ini, spec buat listing
+      # melewati langkah login yang ber-reCAPTCHA sehingga bisa jalan HEADLESS
+      # di sini. Tanpa secret, langkahnya no-op dan spec tsb tetap skip.
+      - name: Pulihkan sesi agen (bila secret tersedia)
+        env:
+          AGENT_STORAGE_STATE_B64: ${{ secrets.AGENT_STORAGE_STATE_B64 }}
+        run: npm run sesi:pulihkan
+
       - name: Jalankan suite web
         run: npm run test:ci
         continue-on-error: true
@@ -119,6 +127,11 @@ jobs:
 
       - name: Buat fixture sintetis
         run: npm run fixtures
+
+      - name: Pulihkan sesi agen (bila secret tersedia)
+        env:
+          AGENT_STORAGE_STATE_B64: ${{ secrets.AGENT_STORAGE_STATE_B64 }}
+        run: npm run sesi:pulihkan
 
       - name: Jalankan suite ber-reCAPTCHA (headed via xvfb)
         # workers=1: keduanya login sebagai akun yang sama & menulis data.

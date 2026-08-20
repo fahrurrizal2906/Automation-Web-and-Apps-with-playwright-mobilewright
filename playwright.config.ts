@@ -34,6 +34,24 @@ export default defineConfig({
   },
   projects: [
     {
+      // Setup manual (BUKAN dependency project): login sekali headed lalu simpan
+      // sesi agen. Dijalankan sendiri lewat `npm run auth:agen`, tidak otomatis,
+      // karena butuh Chrome asli + interaksi reCAPTCHA yang tidak cocok untuk CI.
+      name: 'setup',
+      testDir: './test/setup',
+      // Berkas *.setup.ts tidak cocok dengan testMatch default Playwright
+      // (**/*.@(spec|test).ts) — tanpa baris ini project-nya "No tests found".
+      testMatch: '**/*.setup.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Chrome asli: reCAPTCHA v3 memberi skor lebih rendah pada Chromium
+        // bundled sampai login ditolak diam-diam. Kalau Chrome belum ada:
+        // `npx playwright install chrome`.
+        channel: 'chrome',
+        headless: false,
+      },
+    },
+    {
       name: 'chromium',
       testDir: './test/web',
       use: {

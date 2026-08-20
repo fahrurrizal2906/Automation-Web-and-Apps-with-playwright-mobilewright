@@ -405,6 +405,54 @@ export class RegistrasiPage {
     await this.tombolSetuju.click();
   }
 
+  // ── Pengamat state form (dipakai spec non-submit yang bisa jalan di CI) ─────
+  // Spec non-submit sengaja dipisah: reCAPTCHA hanya menghalangi LANGKAH TERAKHIR
+  // (kirim data), sedangkan validasi field, dropdown berantai, tanda tangan, dan
+  // dialog konfirmasi seluruhnya bisa diverifikasi tanpa menyentuh captcha.
+
+  /** Masih di Step 1? Ditandai field "Nama Lengkap" yang hanya ada di step itu. */
+  async diStep1(): Promise<boolean> {
+    return this.namaLengkap.isVisible({ timeout: 5000 }).catch(() => false);
+  }
+
+  /** Sudah di Step 2? Ditandai tombol "Buat Tanda Tangan" yang hanya ada di step itu. */
+  async diStep2(): Promise<boolean> {
+    return this.tombolBuatTandaTangan.isVisible({ timeout: 10000 }).catch(() => false);
+  }
+
+  /**
+   * Jumlah dropdown wajib yang masih menampilkan placeholder "Pilih salah satu".
+   * Dipakai untuk membuktikan munculnya field KONDISIONAL setelah sebuah opsi
+   * dipilih (jumlahnya bertambah), tanpa perlu tahu nama field barunya.
+   */
+  async jumlahDropdownBelumTerisi(): Promise<number> {
+    return this.page
+      .getByRole('combobox', { name: 'trigger' })
+      .filter({ hasText: 'Pilih salah satu' })
+      .count();
+  }
+
+  /** Dialog konfirmasi (tombol "Setuju") sedang tampil? */
+  async adaDialogKonfirmasi(): Promise<boolean> {
+    return this.tombolSetuju.isVisible({ timeout: 10000 }).catch(() => false);
+  }
+
+  /**
+   * Tutup dialog konfirmasi TANPA mengirim data — dipakai spec CI supaya tidak
+   * membuat pengajuan nyata (dan tidak menyentuh reCAPTCHA yang ada di submit).
+   */
+  async batalkanDialogKonfirmasi(): Promise<void> {
+    const batal = this.page
+      .getByRole('button', { name: /batal|tidak|tutup|cancel|kembali/i })
+      .first();
+    if (await batal.isVisible().catch(() => false)) {
+      await batal.click();
+    } else {
+      await this.page.keyboard.press('Escape');
+    }
+    await this.tombolSetuju.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+  }
+
   /**
    * Tunggu halaman "berhasil mendaftar" muncul setelah klik Setuju.
    * Mendeteksi kombinasi: URL berubah ke halaman sukses ATAU muncul teks

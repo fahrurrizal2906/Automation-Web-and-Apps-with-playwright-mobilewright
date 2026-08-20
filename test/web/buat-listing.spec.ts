@@ -1,10 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { AgentLoginPage } from '../../pages/web/AgentLoginPage';
 import { BuatListingPage, ListingData } from '../../pages/web/BuatListingPage';
-import { AGENT, punyaKredensialAgen } from '../../config/env';
+import { AGENT, adaSesiAgen, punyaKredensialAgen, SESI_AGEN_FILE } from '../../config/env';
 
 // Kredensial agen HANYA dari env (TEST_AGENT_USERNAME / TEST_AGENT_PASSWORD).
 // Repo ini publik — tidak ada kredensial yang dihardcode.
+//
+// DUA JALUR MASUK:
+//   1. Sesi tersimpan (`npm run auth:agen`) → langkah login DILEWATI, sehingga spec
+//      ini bisa jalan HEADLESS di CI. reCAPTCHA hanya menghalangi login, bukan
+//      form listing-nya.
+//   2. Tanpa sesi → login memakai kredensial, dan itu butuh headed (reCAPTCHA).
 
 // Data listing yang akan dibuat
 const LISTING_DATA: ListingData = {
@@ -40,6 +46,10 @@ const LISTING_DATA: ListingData = {
 };
 
 test.describe('Buat Listing — Agen (web dashboard)', () => {
+  // Pakai sesi tersimpan bila ada. Sengaja dibaca saat kolektor test berjalan
+  // (bukan di dalam test) karena storageState harus ditentukan sebelum context dibuat.
+  test.use({ storageState: adaSesiAgen() ? SESI_AGEN_FILE : undefined });
+
   test.setTimeout(600000); // 10 menit — flow form lengkap (foto + 6 step + submit)
 
   let loginPage: AgentLoginPage;
@@ -67,11 +77,26 @@ test.describe('Buat Listing — Agen (web dashboard)', () => {
     const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
     const isCI = Boolean(env.CI);
     const forceRun = env.FORCE_RUN_RECAPTCHA === 'true';
+    const pakaiSesi = adaSesiAgen();
     test.skip(!process.env['TEST_BASE_URL'], 'TEST_BASE_URL belum diisi.');
-    test.skip(!punyaKredensialAgen, 'TEST_AGENT_USERNAME / TEST_AGENT_PASSWORD belum diisi.');
-    test.skip(isCI && !forceRun, 'Skip default di CI (reCAPTCHA). Override via FORCE_RUN_RECAPTCHA=true.');
+    test.skip(
+      !pakaiSesi && !punyaKredensialAgen,
+      'Butuh sesi tersimpan (npm run auth:agen) ATAU TEST_AGENT_USERNAME/PASSWORD.',
+    );
+    // Gerbang reCAPTCHA hanya berlaku untuk jalur LOGIN. Dengan sesi tersimpan,
+    // tidak ada captcha yang dilewati, jadi spec ini sah jalan headless di CI.
+    test.skip(
+      isCI && !forceRun && !pakaiSesi,
+      'Di CI tanpa sesi tersimpan, login diblokir reCAPTCHA. Sediakan secret ' +
+        'AGENT_STORAGE_STATE_B64, atau jalankan dengan FORCE_RUN_RECAPTCHA=true.',
+    );
 
-    await test.step('Login sebagai agen', async () => {
+    await test.step(pakaiSesi ? 'Pakai sesi agen tersimpan' : 'Login sebagai agen', async () => {
+      if (pakaiSesi) {
+        // Sesi sudah dimuat lewat storageState — tidak ada form login yang disentuh.
+        testInfo.annotations.push({ type: 'sesi', description: 'storageState tersimpan' });
+        return;
+      }
       await loginPage.goto();
       await loginPage.login(AGENT.username, AGENT.password);
 
@@ -80,7 +105,12 @@ test.describe('Buat Listing — Agen (web dashboard)', () => {
     });
 
     await test.step('Navigasi ke dashboard agen dan buka form buat listing', async () => {
-      await listingPage.navigasiKeDashboard(AGENT.username, AGENT.password);
+      // Tanpa kredensial (jalur sesi), navigasiKeDashboard() melempar pesan jelas
+      // bila ternyata mendarat di halaman login — mis. sesinya sudah kedaluwarsa.
+      await listingPage.navigasiKeDashboard(
+        pakaiSesi ? undefined : AGENT.username,
+        pakaiSesi ? undefined : AGENT.password,
+      );
       await listingPage.bukaFormBuatListing();
 
       const screenshot = await page.screenshot({ fullPage: true });
