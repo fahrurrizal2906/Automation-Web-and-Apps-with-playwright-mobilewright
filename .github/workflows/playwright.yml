@@ -1,0 +1,92 @@
+name: Playwright + Allure
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      force_run_recaptcha:
+        description: 'Jalankan juga spec yang digerbangi reCAPTCHA (headed via xvfb)'
+        type: boolean
+        default: false
+  schedule:
+    # 01:00 UTC = 08:00 WIB, tiap hari
+    - cron: '0 1 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playwright-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Target uji datang dari secrets. Bila TEST_BASE_URL kosong, suite web
+      # SKIP dengan pesan jelas — bukan gagal, dan bukan menghantam host acak.
+      TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
+      TEST_AGENT_DASHBOARD_URL: ${{ secrets.TEST_AGENT_DASHBOARD_URL }}
+      TEST_REGISTRATION_URL: ${{ secrets.TEST_REGISTRATION_URL }}
+      TEST_AGENT_USERNAME: ${{ secrets.TEST_AGENT_USERNAME }}
+      TEST_AGENT_PASSWORD: ${{ secrets.TEST_AGENT_PASSWORD }}
+      FORCE_RUN_RECAPTCHA: ${{ inputs.force_run_recaptcha && 'true' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install browser Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Buat fixture sintetis
+        run: npm run fixtures
+
+      - name: Audit sanitasi (repo publik)
+        run: npm run audit:sanitasi
+
+      - name: Jalankan suite web
+        run: npm run test:ci
+        continue-on-error: true
+
+      - name: Generate Allure report
+        if: always()
+        run: npm run report:generate
+
+      - name: Unggah Allure report sebagai artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report
+          retention-days: 30
+
+      - name: Unggah artifact untuk GitHub Pages
+        if: always() && github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: allure-report
+
+  # Report dipublikasikan lewat artifact Pages (bukan folder docs/ yang di-commit),
+  # supaya riwayat repo tidak membengkak oleh ribuan berkas report per run.
+  publish:
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

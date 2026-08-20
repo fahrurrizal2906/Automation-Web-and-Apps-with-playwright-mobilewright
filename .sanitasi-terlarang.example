@@ -1,0 +1,17 @@
+# Daftar pola (regex, satu per baris) yang TIDAK boleh muncul di repo publik ini.
+# Salin file ini menjadi `.sanitasi-terlarang` — file tsb ada di .gitignore, jadi
+# isinya (yang justru sensitif) tidak pernah ter-commit.
+#
+# Isi biasanya:
+#   - nama klien / employer dan singkatannya
+#   - domain internal (situs, staging, gateway, dashboard)
+#   - prefiks tiket / project key issue tracker
+#   - username & password akun uji
+#   - applicationId / bundle id aplikasi milik klien
+#
+# Contoh bentuknya (ganti dengan milik Anda):
+# nama-klien
+# namaklien\.co\.id
+# ABC-\d{3,5}
+# com\.namaklien
+# nama\.akun\.uji

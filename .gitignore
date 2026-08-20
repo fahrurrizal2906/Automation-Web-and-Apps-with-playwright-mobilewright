@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Konfigurasi lokal — TIDAK boleh masuk repo (berisi host & kredensial nyata)
+.env
+.env.local
+.env.*.local
+
+# Artefak run
+allure-results/
+allure-report/
+test-results/
+playwright-report/
+mobilewright-report/
+playwright/.auth/
+*.log
+
+# APK / binary aplikasi yang diuji — jangan didistribusikan lewat repo ini
+*.apk
+*.aab
+*.ipa
+
+# Fixture yang dihasilkan (regenerate: npm run fixtures)
+fixtures/*.png
+fixtures/*.jpg
+fixtures/*.jpeg
+!fixtures/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.tsbuildinfo
+
+# Daftar kata terlarang untuk audit sanitasi (isinya sensitif)
+.sanitasi-terlarang
