@@ -47,6 +47,10 @@ function git(args) {
   }
 }
 
+// Lockfile berisi ratusan URL registry npm yang sah — pemeriksaan URL di situ hanya
+// menghasilkan derau, baik di working tree maupun di diff riwayat.
+const LOCKFILE = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml)$/;
+
 const pola = [...POLA_GENERIK, ...polaKustom()];
 const temuan = [];
 
@@ -60,9 +64,8 @@ for (const f of berkas) {
   } catch {
     continue; // binary / tak terbaca
   }
-  // Lockfile berisi ratusan URL registry npm yang sah — pemeriksaan URL di situ hanya
-  // menghasilkan derau. Kata terlarang & kredensial tetap diperiksa.
-  const lockfile = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(f);
+  // Kata terlarang & kredensial tetap diperiksa di lockfile; hanya pola URL dilewati.
+  const lockfile = LOCKFILE.test(f);
   isi.split(/\r?\n/).forEach((baris, i) => {
     for (const p of pola) {
       if (lockfile && p.nama === 'URL absolut non-contoh') continue;
@@ -78,14 +81,25 @@ for (const f of berkas) {
 }
 
 // --- 2. Riwayat git (semua commit, semua branch) -----------------------------
+// Baris yang ditambahkan di tiap commit diperiksa dengan aturan yang SAMA seperti
+// working tree — termasuk pengecualian lockfile. Tanpa melacak berkas asal tiap
+// hunk, diff lockfile membanjiri hasil dengan URL registry npm yang sah.
 const riwayat = git(['log', '-p', '--all', '--no-color']);
 if (riwayat) {
   let commit = '(awal)';
+  let berkasHunk = '';
   riwayat.split(/\r?\n/).forEach((baris) => {
     const m = /^commit ([0-9a-f]{7,40})/.exec(baris);
     if (m) commit = m[1].slice(0, 9);
+    const mBerkas = /^\+\+\+ (?:b\/)?(.+)$/.exec(baris);
+    if (mBerkas) {
+      berkasHunk = mBerkas[1].trim();
+      return;
+    }
     if (!baris.startsWith('+') || baris.startsWith('+++')) return;
+    const lockfileHunk = LOCKFILE.test(berkasHunk);
     for (const p of pola) {
+      if (lockfileHunk && p.nama === 'URL absolut non-contoh') continue;
       if (p.re.test(baris)) {
         temuan.push({
           lokasi: `riwayat ${commit}`,
